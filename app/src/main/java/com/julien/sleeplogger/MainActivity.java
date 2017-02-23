@@ -1,5 +1,6 @@
 package com.julien.sleeplogger;
 
+import android.os.Build;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.database.sqlite.*;
@@ -8,7 +9,11 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
 import android.widget.TextView;
+
 import com.julien.sleeplogger.R;
+
+import android.support.annotation.NonNull;
+import android.content.pm.PackageManager;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -18,11 +23,17 @@ public class MainActivity extends AppCompatActivity {
     private static double mEMA = 0.0;
     static final private double EMA_FILTER = 0.6;
 
-    final Runnable updater = new Runnable(){
+    private boolean permissionToRecordAccepted = false;
+    private boolean permissionToWriteAccepted = false;
+    private String[] permissions = {"android.permission.RECORD_AUDIO", "android.permission.WRITE_EXTERNAL_STORAGE"};
 
-        public void run(){
+    final Runnable updater = new Runnable() {
+
+        public void run() {
             updateTv();
-        };
+        }
+
+        ;
     };
     final Handler mHandler = new Handler();
 
@@ -32,20 +43,24 @@ public class MainActivity extends AppCompatActivity {
 
         setContentView(R.layout.activity_main);
 
+        // Add the following code to your onCreate
+        int requestCode = 200;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            requestPermissions(permissions, requestCode);
+        }
+
         mStatusView = (TextView) findViewById(R.id.sensorText);
 
-        if (runner == null)
-        {
-            runner = new Thread(){
-                public void run()
-                {
-                    while (runner != null)
-                    {
-                        try
-                        {
+        if (runner == null) {
+            runner = new Thread() {
+                public void run() {
+                    while (runner != null) {
+                        try {
                             Thread.sleep(1000);
                             Log.i("Noise", "Tock");
-                        } catch (InterruptedException e) { };
+                        } catch (InterruptedException e) {
+                        }
+                        ;
                         mHandler.post(updater);
                     }
                 }
@@ -55,41 +70,39 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    public void onResume()
-    {
+    public void onResume() {
         super.onResume();
         startRecorder();
     }
 
-    public void onPause()
-    {
+    public void onPause() {
         super.onPause();
         stopRecorder();
     }
 
-    public void startRecorder(){
-        if (mRecorder == null)
-        {
+    public void startRecorder() {
+        if (mRecorder == null) {
+
             mRecorder = new MediaRecorder();
+
             mRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
             mRecorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP);
             mRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB);
             mRecorder.setOutputFile("/dev/null");
-            try
-            {
+
+            try {
                 mRecorder.prepare();
-            }catch (java.io.IOException ioe) {
+            } catch (java.io.IOException ioe) {
                 android.util.Log.e("[Monkey]", "IOException: " +
                         android.util.Log.getStackTraceString(ioe));
 
-            }catch (java.lang.SecurityException e) {
+            } catch (java.lang.SecurityException e) {
                 android.util.Log.e("[Monkey]", "SecurityException: " +
                         android.util.Log.getStackTraceString(e));
             }
-            try
-            {
+            try {
                 mRecorder.start();
-            }catch (java.lang.SecurityException e) {
+            } catch (java.lang.SecurityException e) {
                 android.util.Log.e("[Monkey]", "SecurityException: " +
                         android.util.Log.getStackTraceString(e));
             }
@@ -98,31 +111,53 @@ public class MainActivity extends AppCompatActivity {
         }
 
     }
+
     public void stopRecorder() {
         if (mRecorder != null) {
-            mRecorder.stop();
+            try {
+                mRecorder.stop();
+            } catch (RuntimeException stopException) {
+                //handle cleanup here
+            }
+
             mRecorder.release();
             mRecorder = null;
         }
     }
 
-    public void updateTv(){
+    public void updateTv() {
         mStatusView.setText(Double.toString((getAmplitudeEMA())) + " dB");
     }
-    public double soundDb(double ampl){
-        return  20 * Math.log10(getAmplitudeEMA() / ampl);
+
+    public double soundDb(double ampl) {
+        return 20 * Math.log10(getAmplitudeEMA() / ampl);
     }
+
     public double getAmplitude() {
         if (mRecorder != null)
-            return  (mRecorder.getMaxAmplitude());
+            return (mRecorder.getMaxAmplitude());
         else
             return 0;
-
     }
+
     public double getAmplitudeEMA() {
-        double amp =  getAmplitude();
+        double amp = getAmplitude();
         mEMA = EMA_FILTER * amp + (1.0 - EMA_FILTER) * mEMA;
         return mEMA;
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        switch (requestCode) {
+            case 200:
+                permissionToRecordAccepted = grantResults[0] == PackageManager.PERMISSION_GRANTED;
+                permissionToWriteAccepted = grantResults[1] == PackageManager.PERMISSION_GRANTED;
+                break;
+        }
+        if (!permissionToRecordAccepted) MainActivity.super.finish();
+        if (!permissionToWriteAccepted) MainActivity.super.finish();
+
     }
 
 }
